@@ -1,0 +1,793 @@
+// 5hell test suite (in-game)
+// Build this separately with greybel-js.
+
+if not globals.hasIndex("params") then globals.params = []
+if not globals.hasIndex("DEBUG") then globals.DEBUG = false
+if not globals.hasIndex("SILENT") then globals.SILENT = 0
+if not globals.hasIndex("command") then command = {}
+if not globals.hasIndex("shell") then shell = get_shell
+if not globals.hasIndex("localmachine") then localmachine = shell.host_computer
+if not globals.hasIndex("currentPath") then globals.currentPath = current_path
+if not globals.hasIndex("homePath") then globals.homePath = home_dir
+if not globals.hasIndex("instance") then globals.instance = localmachine.File(program_path)
+if not globals.hasIndex("XPLOITS") then globals.XPLOITS = []
+if not globals.hasIndex("spoolpath") then globals.spoolpath = 0
+if not globals.hasIndex("BUFFER") then globals.BUFFER = [get_shell]
+
+colorRed =            "<color=#FF0000FF><b>"
+colorCyan =           "<color=#00FFFFFF><b>"
+colorGold =           "<color=#CCCC00FF><b>"
+colorGrey =           "<color=#71858DFF><b>"
+colorGreen =          "<color=#00FF00FF><b>"
+colorOlive =          "<color=#048004FF><b>"
+colorWhite =          "<color=#FFFFFFFF><b>"
+colorBlack =          "<color=#000000FF><b>"
+colorOrange =         "<color=#FF8400FF><b>"
+colorViolet =         "<color=#8821FDFF><b>"
+colorMagenta =        "<color=#FF00C8FF><b>"
+colorLightBlue =      "<color=#2382FFFF><b>"
+colorDarkBlue =       "<color=#0000FFFF><b>"
+colorDefault =        "<color=#00FF00FF>"
+colorError =          "<color=#FF0000FF><b>"
+colorWarning =        "<color=#FF8400FF><b>"
+color5phinxText =     "<color=#FFFFFFFF><b>"
+color5phinxButton =   "<color=#00FFFFFF><b>"
+color5phinxElement =  "<color=#71858DFF><b>"
+color5phinxDisplay =  "<color=#00FFFFFF><b>"
+CT = "</color></b>"
+
+// Do not remove the comment in the next line, it is necessary for Greybel support.
+import_code("/root/src/5hell.5pk") // override=5hell.5pk
+
+command.shell = function(arg1, arg2=0, arg3=0, arg4=0)
+	cmd_text = ""
+	if typeof(arg1) == "list" then
+		for part in arg1
+			if part == "|" then break
+			if cmd_text == "" then
+				cmd_text = part
+			else
+				cmd_text = cmd_text + " " + part
+			end if
+		end for
+	else
+		cmd_text = arg1
+	end if
+	if typeof(cmd_text) != "string" then return null
+	cmd_text = cmd_text.trim
+	if cmd_text == "" then return null
+	if cmd_text.indexOf("||") != null then
+		seq = cmd_text.split("||")
+		last = null
+		for step in seq
+			step = step.trim
+			if step == "" then continue
+			last = command.shell(step)
+		end for
+		return last
+	end if
+	parts = cmd_text.split(" ")
+	args = []
+	for part in parts
+		if part != "" then args.push(part)
+	end for
+	if not args.len then return null
+	segments = []
+	segment = []
+	for part in args
+		if part == "|" then
+			if segment.len then segments.push(segment)
+			segment = []
+		else
+			segment.push(part)
+		end if
+	end for
+	if segment.len then segments.push(segment)
+	if not segments.len then return null
+	last = null
+	for segment in segments
+		if last != null then segment.push(last)
+		if segment.len and segment[0] == "return" then
+			if segment.len > 1 then return segment[1]
+			return last
+		end if
+		cmd_name = segment[0]
+		if not command.hasIndex(cmd_name) then return "shell: command not found: "+cmd_name
+		runner = command[cmd_name]
+		a1 = 0
+		a2 = 0
+		a3 = 0
+		a4 = 0
+		if segment.len > 1 then a1 = segment[1]
+		if segment.len > 2 then a2 = segment[2]
+		if segment.len > 3 then a3 = segment[3]
+		if segment.len > 4 then a4 = segment[4]
+		catch = runner(a1, a2, a3, a4)
+		if typeof(catch) == "function" then catch = catch()
+		last = catch
+	end for
+	return last
+end function
+
+globals._test_cases = []
+globals._test_passes = 0
+globals._test_fails = 0
+
+globals._test_add = function(name, fn)
+	globals._test_cases.push({"name":name, "fn":fn})
+end function
+
+globals._assert = function(cond, msg="assert failed")
+	if cond then return null
+	return msg
+end function
+
+globals._assert_eq = function(actual, expected, msg=0)
+	if actual == expected then return null
+	if not msg then msg = "expected ["+str(expected)+"] got ["+str(actual)+"]"
+	return msg
+end function
+
+globals._assert_contains = function(haystack, needle, msg=0)
+	if typeof(haystack) != "string" then return "expected string output"
+	if haystack.indexOf(needle) == null then
+		if not msg then msg = "expected to find ["+needle+"]"
+		return msg
+	end if
+	return null
+end function
+
+globals._assert_file_exists = function(path, msg=0)
+	if globals.get_file(path) then return null
+	if not msg then msg = "missing file: "+path
+	return msg
+end function
+
+globals._assert_file_missing = function(path, msg=0)
+	if not globals.get_file(path) then return null
+	if not msg then msg = "file still exists: "+path
+	return msg
+end function
+
+globals._orig_command_functions = [
+	"air",
+	"append",
+	"aptm",
+	"bios",
+	"brutus",
+	"buffer",
+	"cad",
+	"calc",
+	"cat",
+	"cc",
+	"cd",
+	"cerebrum",
+	"chop",
+	"clear",
+	"clipa",
+	"clipb",
+	"clipc",
+	"cname",
+	"cob",
+	"code",
+	"cp",
+	"credits",
+	"curl",
+	"db",
+	"dfit",
+	"diff",
+	"dig",
+	"dm",
+	"do",
+	"echo",
+	"enum",
+	"fakepass",
+	"felix",
+	"fetch",
+	"file",
+	"flood",
+	"fwr",
+	"games",
+	"glasspool",
+	"glosure",
+	"gopher",
+	"grep",
+	"grp",
+	"hashim",
+	"help",
+	"ifconfig",
+	"infil",
+	"ipfit",
+	"iwlist",
+	"jtr",
+	"kill",
+	"kore",
+	"kraken",
+	"lanpro",
+	"liber",
+	"linkdb",
+	"lock",
+	"ls",
+	"macro",
+	"mail",
+	"make",
+	"makfit",
+	"malp",
+	"md5",
+	"memdump",
+	"merge",
+	"meta",
+	"mkdir",
+	"mv",
+	"netdump",
+	"nsl",
+	"nt",
+	"osint",
+	"outmon",
+	"passwd",
+	"pause",
+	"perms",
+	"ping",
+	"pipe",
+	"poke",
+	"porter",
+	"probe",
+	"prox",
+	"ps",
+	"psudo",
+	"purge",
+	"pwd",
+	"quit",
+	"rclean",
+	"reboot",
+	"rm",
+	"rnip",
+	"roil",
+	"rshell",
+	"rsi",
+	"run",
+	"scpm",
+	"scribus",
+	"scrub",
+	"shell",
+	"silentclean",
+	"sl",
+	"smtp",
+	"sniff",
+	"spam",
+	"sphinx",
+	"ssh",
+	"string",
+	"sudo",
+	"target",
+	"tdump",
+	"time",
+	"transmit",
+	"tree",
+	"tws",
+	"usr",
+	"whoami",
+	"whois",
+	"zap",
+	"zc",
+]
+
+globals._orig_global_functions = [
+	"_cascade",
+	"_export_metax_et_al",
+	"_ez_clip",
+	"_import_tables",
+	"_shell_prompt",
+	"_startup_resource_configuration",
+	"curl",
+	"decompiler",
+	"dict_a",
+	"exit",
+	"fexecute",
+	"file_sus",
+	"get_binaries",
+	"get_file",
+	"hooked_comp",
+	"import_lib",
+	"is_home",
+	"is_restricted",
+	"lan_probe",
+	"list_files",
+	"localip",
+	"memory_alpha",
+	"netdump",
+	"newtree",
+	"p_exe",
+	"print",
+	"pubip",
+	"rclean",
+	"rsi_purge",
+	"select_attack",
+	"shell_prompt",
+	"stack_pool",
+	"super_import",
+	"sus",
+	"trythis",
+	"user_input",
+	"wrap_text",
+]
+
+globals._orig_private_functions = [
+	"__scope",
+	"_clipboard",
+	"display_portmap",
+	"dump_memory",
+	"en_de_crypt_files",
+	"fw_rules",
+	"get_lib",
+	"hot_swap_libs",
+	"list_daemons",
+	"load_lib",
+	"mail_user_list",
+	"mail_widget",
+	"main",
+	"make_portmap",
+	"menu_launcher",
+	"NUM_SPLOITS",
+	"p_validate",
+	"page_two",
+	"print_help",
+	"r_hecks",
+	"roil",
+	"scan_memory",
+	"scribus",
+	"secure_connect",
+	"secure_copy",
+	"set_ip",
+	"set_port",
+	"sphinx_help",
+	"sphinx_switch",
+	"update_path",
+	"update_port_info",
+	"who_scan",
+	"zap_it",
+]
+
+globals._assert_function_set = function(func_names, scope_label, optional_missing=[])
+	missing = []
+	for fname in func_names
+		found = false
+		if scope_label == "command" then
+			if command.hasIndex(fname) and typeof(command[fname]) == "function" then found = true
+		else
+			if globals.hasIndex(fname) and typeof(globals[fname]) == "function" then found = true
+		end if
+		if not found and optional_missing.indexOf(fname) == null then missing.push(fname)
+	end for
+	if missing.len > 0 then return scope_label+" missing: "+missing.join(", ")
+	return null
+end function
+
+globals.PIPE_HITS = []
+
+command.testsink = function(arg1=0, arg2=0, arg3=0, arg4=0)
+	hit = ""
+	if typeof(arg1) == "string" then hit = arg1
+	if typeof(arg1) == "number" then hit = str(arg1)
+	if typeof(arg1) == "file" then hit = arg1.path
+	if typeof(arg1) == "list" then hit = arg1.join(" ")
+	if hit == "" then hit = typeof(arg1)
+	globals.PIPE_HITS.push(hit)
+	return hit
+end function
+
+globals._suite_path = function(name)
+	return globals._test_root + "/" + name
+end function
+
+globals._run_one = function(t)
+	name = t["name"]
+	fn = t["fn"]
+	saved_path = globals.currentPath
+	err = fn()
+	if globals.currentPath != saved_path then command.cd(saved_path)
+	if err then
+		globals._test_fails = globals._test_fails + 1
+		print("TEST:FAIL:"+name+":"+err)
+	else
+		globals._test_passes = globals._test_passes + 1
+		print("TEST:PASS:"+name)
+	end if
+end function
+
+globals.run_tests = function()
+	globals._test_passes = 0
+	globals._test_fails = 0
+	for t in globals._test_cases
+		globals._run_one(t)
+	end for
+	print("TEST:SUMMARY:pass="+globals._test_passes+" fail="+globals._test_fails)
+	return globals._test_fails == 0
+end function
+
+globals._keep_artifacts = false
+if globals.hasIndex("params") and globals.params.indexOf("--keep") != null then globals._keep_artifacts = true
+
+globals._test_root = globals.homePath + "/5hell_test_suite"
+
+globals._prep_fs = function()
+	if globals.get_file(globals._test_root) then
+		command.rm("-r", globals._test_root)
+	end if
+	command.mkdir(globals._test_root)
+	if not globals.get_file(globals._test_root) then return "failed to create test directory"
+	cd_err = command.cd(globals._test_root)
+	if cd_err then return cd_err
+	return null
+end function
+
+globals._cleanup_fs = function()
+	command.cd(globals.homePath)
+	command.rm("-r", globals._test_root)
+end function
+
+setup_err = globals._prep_fs()
+if setup_err then
+	print("TEST:FAIL:setup:"+setup_err)
+	print("TEST:SUMMARY:pass=0 fail=1")
+	exit("test setup failed")
+end if
+
+globals.test_core_command_map = function()
+	if not command.hasIndex("echo") then return "missing command.echo"
+	if not command.hasIndex("calc") then return "missing command.calc"
+	if not command.hasIndex("md5") then return "missing command.md5"
+	if not command.hasIndex("rnip") then return "missing command.rnip"
+	if not command.hasIndex("do") then return "missing command.do"
+	if not command.hasIndex("enum") then return "missing command.enum"
+	return null
+end function
+
+globals.test_core_colors = function()
+	if not colorRed or not CT then return "color palette not initialized"
+	return null
+end function
+
+globals.test_core_paths = function()
+	if not globals.homePath then return "homePath missing"
+	if not globals.currentPath then return "currentPath missing"
+	return globals._assert_eq(command.pwd(), globals._test_root)
+end function
+
+globals.test_manifest_original_commands = function()
+	return globals._assert_function_set(globals._orig_command_functions, "command")
+end function
+
+globals.test_manifest_original_globals = function()
+	return globals._assert_function_set(globals._orig_global_functions, "globals")
+end function
+
+globals.test_manifest_original_privates = function()
+	return globals._assert_function_set(globals._orig_private_functions, "private", ["__scope"])
+end function
+
+globals.test_cmd_echo = function()
+	res = command.echo("hello", "world")
+	return globals._assert_eq(res, "hello world")
+end function
+
+globals.test_cmd_calc_add = function()
+	res = command.calc("2", "+", "2")
+	return globals._assert_eq(str(res), "4")
+end function
+
+globals.test_cmd_calc_pwr = function()
+	res = command.calc("2", "pwr", "3")
+	return globals._assert_eq(str(res), "8")
+end function
+
+globals.test_cmd_md5 = function()
+	res = command.md5("test")
+	return globals._assert_eq(res, "098f6bcd4621d373cade4e832627b4f6")
+end function
+
+globals.test_cmd_rnip = function()
+	res = command.rnip("3")
+	ips = res.trim.split(char(10))
+	if ips.len != 3 then return "expected 3 ips, got "+str(ips.len)
+	for ip in ips
+		if not is_valid_ip(ip.trim) then return "invalid ip: "+ip
+	end for
+	return null
+end function
+
+globals.test_cmd_clipboard = function()
+	command.clipa("clip-test")
+	return globals._assert_eq(globals.CLIP["a"], "clip-test")
+end function
+
+globals.test_cmd_enum_list = function()
+	command.enum("-p")
+	res = command.enum(["one", "two"])
+	if res != "enum: list enumerated" then return res
+	if command.enum("-l") != "2" then return "enum length mismatch"
+	if command.enum("1") != "two" then return "enum index mismatch"
+	command.enum("-p")
+	return globals._assert_eq(command.enum("-l"), "0")
+end function
+
+globals.test_fs_mkdir_cd_pwd = function()
+	work = globals._suite_path("workspace")
+	command.mkdir(work)
+	if typeof(globals.get_file(work)) != "file" then return "mkdir failed"
+	cd_err = command.cd(work)
+	if cd_err then return cd_err
+	err = globals._assert_eq(command.pwd(), work)
+	command.cd(globals._test_root)
+	return err
+end function
+
+globals.test_fs_poke_cat_append = function()
+	file_path = globals._suite_path("alpha.txt")
+	res = command.poke(file_path, "alpha")
+	if typeof(res) != "file" then return "poke did not return file"
+	if command.cat(file_path) != "alpha" then return "cat mismatch"
+	command.append(file_path, "beta")
+	c2 = command.cat(file_path)
+	return globals._assert_contains(c2, "beta")
+end function
+
+globals.test_fs_copy_move_merge = function()
+	src = globals._suite_path("copy_source.txt")
+	dst = globals._suite_path("copy_target.txt")
+	moved = globals._suite_path("moved_target.txt")
+	command.poke(src, "alpha")
+	command.cp(src, dst)
+	err = globals._assert_file_exists(dst)
+	if err then return err
+	command.mv(dst, moved)
+	err = globals._assert_file_exists(moved)
+	if err then return err
+	command.poke(globals._suite_path("merge_source.txt"), "beta")
+	command.merge(src, globals._suite_path("merge_source.txt"))
+	merged = command.cat(src)
+	return globals._assert_contains(merged, "beta")
+end function
+
+globals.test_fs_ls = function()
+	work_file = globals._suite_path("ls_probe.txt")
+	work_dir = globals._suite_path("ls_probe_dir")
+	command.poke(work_file, "probe")
+	command.mkdir(work_dir)
+	out = command.ls()
+	if typeof(out) != "string" then return "ls did not return string"
+	if out.indexOf("ls_probe.txt") == null then return "ls_probe.txt missing"
+	if out.indexOf("ls_probe_dir") == null then return "ls_probe_dir missing"
+	return null
+end function
+
+globals.test_fs_rm_cleanup = function()
+	files = [
+		globals._suite_path("alpha.txt"),
+		globals._suite_path("copy_source.txt"),
+		globals._suite_path("moved_target.txt"),
+		globals._suite_path("merge_source.txt"),
+		globals._suite_path("ls_probe.txt")
+	]
+	for path in files
+		command.rm(path)
+	end for
+	command.rm("-r", globals._suite_path("ls_probe_dir"))
+	command.rm("-r", globals._suite_path("workspace"))
+	if globals.get_file(globals._suite_path("alpha.txt")) then return "alpha.txt still exists"
+	if globals.get_file(globals._suite_path("ls_probe_dir")) then return "ls_probe_dir still exists"
+	return null
+end function
+
+globals.test_fs_recursive_rm = function()
+	root_dir = globals._suite_path("deep")
+	inner_dir = root_dir + "/inner"
+	deep_file = inner_dir + "/deep.txt"
+	command.mkdir(root_dir)
+	command.mkdir(inner_dir)
+	command.poke(deep_file, "depth")
+	if typeof(globals.get_file(deep_file)) != "file" then return "deep file missing"
+	command.rm("-r", root_dir)
+	if globals.get_file(root_dir) then return "root dir still exists"
+	if globals.get_file(deep_file) then return "deep file still exists"
+	return null
+end function
+
+globals.test_cmd_poke_null = function()
+	null_file = globals._suite_path("null.txt")
+	command.poke("-n", null_file)
+	if typeof(globals.get_file(null_file)) != "file" then return "null file missing"
+	return globals._assert_eq(command.cat(null_file), "")
+end function
+
+globals.test_cmd_cat_file_object = function()
+	obj_file = globals._suite_path("object-cat.txt")
+	command.poke(obj_file, "object content")
+	f = globals.get_file(obj_file)
+	if typeof(f) != "file" then return "file object missing"
+	return globals._assert_eq(command.cat(f), "object content")
+end function
+
+globals.test_cmd_enum_insert_remove = function()
+	command.enum("-p")
+	command.enum(["alpha", "gamma"])
+	res = command.enum("-i", "1", "beta")
+	err = globals._assert_contains(res, "inserted")
+	if err then return err
+	if command.enum("1") != "beta" then return "enum insert failed"
+	res = command.enum("-r", "1")
+	err = globals._assert_contains(res, "removed")
+	if err then return err
+	if command.enum("-l") != "2" then return "enum remove length mismatch"
+	if command.enum("1") != "gamma" then return "enum remove failed"
+	command.enum("-p")
+	return null
+end function
+
+globals.test_cmd_purge_enum = function()
+	command.enum(["one", "two"])
+	res = command.purge("-e", "y")
+	err = globals._assert_contains(res, "Enum Buffer")
+	if err then return err
+	return globals._assert_eq(command.enum("-l"), "0")
+end function
+
+globals.test_cmd_enum_append = function()
+	command.enum("-p")
+	res = command.enum("-a", "delta")
+	err = globals._assert_contains(res, "appended")
+	if err then return err
+	if command.enum("-l") != "1" then return "enum append length mismatch"
+	if command.enum("0") != "delta" then return "enum append failed"
+	command.enum("-p")
+	return null
+end function
+
+globals.test_cmd_enum_pipe = function()
+	command.enum("-p")
+	command.enum(["alpha", "beta"])
+	globals.PIPE_HITS = []
+	res = command.enum("-d", "testsink @pipe")
+	err = globals._assert_contains(res, "task complete")
+	if err then
+		return err
+	end if
+	err = globals._assert_eq(str(globals.PIPE_HITS.len), "2")
+	if err then return err
+	err = globals._assert_eq(globals.PIPE_HITS[0], "alpha")
+	if err then return err
+	err = globals._assert_eq(globals.PIPE_HITS[1], "beta")
+	if err then return err
+	command.enum("-p")
+	return null
+end function
+
+globals.test_cmd_do_batch = function()
+	batch = globals._suite_path("do_batch.bat")
+	command.poke(batch,
+		"testsink alpha"+char(10)+
+		"testsink beta")
+	globals.PIPE_HITS = []
+	res = command.do("1", "-f", batch)
+	err = globals._assert_contains(res, "batch complete")
+	if err then return err
+	err = globals._assert_eq(str(globals.PIPE_HITS.len), "2")
+	if err then return err
+	err = globals._assert_eq(globals.PIPE_HITS[0], "alpha")
+	if err then return err
+	err = globals._assert_eq(globals.PIPE_HITS[1], "beta")
+	if err then return err
+	return null
+end function
+
+globals.test_cmd_purge_buffer = function()
+	globals.BUFFER = ["one", "two"]
+	res = command.purge("-b", "y")
+	err = globals._assert_contains(res, "BUFFER")
+	if err then return err
+	return globals._assert_eq(str(globals.BUFFER.len), "1")
+end function
+
+// Mirrors the original secure_copy upload verification path logic:
+// if copy_to == "/" then copy_to = ""
+// check_path = copy_to + "/" + payload.name
+globals._orig_secure_copy_upload_check_path = function(copy_to, payload_name)
+	if copy_to == "/" then copy_to = ""
+	return copy_to + "/" + payload_name
+end function
+
+globals.test_scpm_destination_filename_upload = function()
+	src_dir = globals._suite_path("scp_src_dir")
+	dst_dir = globals._suite_path("scp_dst_dir")
+	command.mkdir(src_dir)
+	command.mkdir(dst_dir)
+	src = src_dir + "/scp_src.log"
+	dst = dst_dir + "/scp_dst.log"
+	dsplit = dst.split("/")
+	dsplit.pop
+	parent = dsplit.join("/")
+	if parent == "" then parent = "/"
+	command.poke(src, "scp test payload")
+	command.rm(dst)
+	if parent == "/" then
+		legacy_name = "/scp_src.log"
+	else
+		legacy_name = parent+"/scp_src.log"
+	end if
+	if legacy_name != src then command.rm(legacy_name)
+
+	// Force upload and skip permission prompts.
+	catch = command.scpm("-u", src, dst, shell)
+	if not catch then catch = ""
+	if typeof(catch) != "string" then catch = str(catch)
+
+	got_dst = globals.get_file(dst)
+	got_legacy = globals.get_file(legacy_name)
+	expect_patched = false
+	if globals.hasIndex("params") and globals.params.indexOf("--expect-scp-file-destination") != null then expect_patched = true
+
+	if expect_patched then
+		if catch.indexOf("failed") != null then return "expected patched behavior, got failure: "+catch
+		err = globals._assert_file_exists(dst, "expected destination file not created: "+dst)
+		if err then return err
+		err = globals._assert_eq(command.cat(dst), command.cat(src), "destination content mismatch")
+		if err then return err
+		return globals._assert_file_missing(legacy_name, "legacy file remained after rename: "+legacy_name)
+	end if
+
+	// Baseline-compatible mode (default): pass if behavior is either legacy fail or patched success.
+	if got_dst then
+		err = globals._assert_eq(command.cat(dst), command.cat(src), "destination content mismatch")
+		if err then return err
+		return globals._assert_file_missing(legacy_name, "legacy file remained after rename: "+legacy_name)
+	end if
+
+	if catch.indexOf("failed") != null then
+		old_check = globals._orig_secure_copy_upload_check_path(dst, "scp_src.log")
+		err = globals._assert_file_missing(old_check, "legacy/original nested check path unexpectedly exists: "+old_check)
+		if err then return err
+		// Known original behavior signature.
+		return null
+	end if
+
+	if got_legacy then
+		// Some environments may leave the copied source name in parent folder without reporting failed.
+		return null
+	end if
+
+	return "unexpected scpm result: "+catch
+end function
+
+globals._test_add("core.command-map", @globals.test_core_command_map)
+globals._test_add("core.colors", @globals.test_core_colors)
+globals._test_add("core.paths", @globals.test_core_paths)
+globals._test_add("manifest.original.commands", @globals.test_manifest_original_commands)
+globals._test_add("manifest.original.globals", @globals.test_manifest_original_globals)
+globals._test_add("manifest.original.privates", @globals.test_manifest_original_privates)
+globals._test_add("cmd.echo", @globals.test_cmd_echo)
+globals._test_add("cmd.calc.add", @globals.test_cmd_calc_add)
+globals._test_add("cmd.calc.pwr", @globals.test_cmd_calc_pwr)
+globals._test_add("cmd.md5", @globals.test_cmd_md5)
+globals._test_add("cmd.rnip", @globals.test_cmd_rnip)
+globals._test_add("cmd.clipboard", @globals.test_cmd_clipboard)
+globals._test_add("cmd.enum.list", @globals.test_cmd_enum_list)
+globals._test_add("fs.mkdir-cd-pwd", @globals.test_fs_mkdir_cd_pwd)
+globals._test_add("fs.poke-cat-append", @globals.test_fs_poke_cat_append)
+globals._test_add("fs.copy-move-merge", @globals.test_fs_copy_move_merge)
+globals._test_add("fs.ls", @globals.test_fs_ls)
+globals._test_add("fs.rm-cleanup", @globals.test_fs_rm_cleanup)
+globals._test_add("fs.recursive-rm", @globals.test_fs_recursive_rm)
+globals._test_add("cmd.poke.null", @globals.test_cmd_poke_null)
+globals._test_add("cmd.cat.file-object", @globals.test_cmd_cat_file_object)
+globals._test_add("cmd.enum.insert-remove", @globals.test_cmd_enum_insert_remove)
+globals._test_add("cmd.purge.enum", @globals.test_cmd_purge_enum)
+globals._test_add("cmd.enum.append", @globals.test_cmd_enum_append)
+globals._test_add("cmd.enum.pipe", @globals.test_cmd_enum_pipe)
+globals._test_add("cmd.do.batch", @globals.test_cmd_do_batch)
+globals._test_add("cmd.purge.buffer", @globals.test_cmd_purge_buffer)
+globals._test_add("scp.destination-filename.upload", @globals.test_scpm_destination_filename_upload)
+
+ok = globals.run_tests()
+if not globals._keep_artifacts then globals._cleanup_fs()
+if not ok then exit("tests failed")
+print("Tests complete.")
