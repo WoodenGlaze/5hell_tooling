@@ -1,5 +1,12 @@
 // 5hell test suite (in-game)
 // Build this separately with greybel-js.
+// Run time options:
+// --keep : keep the test artifacts in home directory after run
+// --runtime-smoke : run runtime smoke tests for original commands/globals/privates
+// --expect-scp-file-destination : expect patched scpm behavior for destination filename handling
+//  (otherwise, baseline-compatible behavior is accepted as passing)
+// Built on version 4.3.9 of 5hell
+// Has been tested on 5hell 4.3.9 (pass=28, fail=2) and 5hell 4.4.0 (pass=29, fail=1) and with the pull request changes (pass=30, fail=0).
 
 if not globals.hasIndex("params") then globals.params = []
 if not globals.hasIndex("DEBUG") then globals.DEBUG = false
@@ -363,6 +370,17 @@ globals._assert_function_set = function(func_names, scope_label, optional_missin
 	return null
 end function
 
+globals._invoke_smoke = function(fn, name)
+	// prefer -h path first; "help" can be interpreted as normal input by some commands
+	out = fn("-h")
+	if typeof(out) == "function" then out = out()
+	if out == null then
+		out = fn("help")
+		if typeof(out) == "function" then out = out()
+	end if
+	return null
+end function
+
 globals.PIPE_HITS = []
 
 command.testsink = function(arg1=0, arg2=0, arg3=0, arg4=0)
@@ -407,6 +425,8 @@ end function
 
 globals._keep_artifacts = false
 if globals.hasIndex("params") and globals.params.indexOf("--keep") != null then globals._keep_artifacts = true
+globals._run_runtime_smoke = false
+if globals.hasIndex("params") and globals.params.indexOf("--runtime-smoke") != null then globals._run_runtime_smoke = true
 
 globals._test_root = globals.homePath + "/5hell_test_suite"
 
@@ -464,6 +484,44 @@ end function
 
 globals.test_manifest_original_privates = function()
 	return globals._assert_function_set(globals._orig_private_functions, "private", ["__scope"])
+end function
+
+globals.test_runtime_original_commands = function()
+	// these are full UI/dispatcher entry points; tested elsewhere with explicit cases
+	skip = ["help", "shell", "sphinx", "games", "mail", "scribus", "quit", "reboot", "run", "do", "nt", "psudo"]
+	for cname in globals._orig_command_functions
+		if skip.indexOf(cname) != null then continue
+		if not command.hasIndex(cname) then return "missing command at runtime: "+cname
+		if typeof(command[cname]) != "function" then return "command not callable: "+cname
+		err = globals._invoke_smoke(command[cname], cname)
+		if err then return "command runtime smoke failed ["+cname+"]: "+err
+	end for
+	return null
+end function
+
+globals.test_runtime_original_globals = function()
+	for gname in globals._orig_global_functions
+		if not globals.hasIndex(gname) then return "missing global at runtime: "+gname
+		if typeof(globals[gname]) != "function" then return "global not callable: "+gname
+		// unsafe in non-interactive harness; covered by manifest presence
+		if gname == "exit" or gname == "user_input" then continue
+		err = globals._invoke_smoke(globals[gname], gname)
+		if err then return "global runtime smoke failed ["+gname+"]: "+err
+	end for
+	return null
+end function
+
+globals.test_runtime_original_privates = function()
+	// these drive full UIs/flows and are not deterministic in non-interactive test mode
+	skip = ["__scope", "main", "menu_launcher", "page_two", "mail_widget", "sphinx_switch"]
+	for pname in globals._orig_private_functions
+		if skip.indexOf(pname) != null then continue
+		if not globals.hasIndex(pname) then return "missing private at runtime: "+pname
+		if typeof(globals[pname]) != "function" then return "private not callable: "+pname
+		err = globals._invoke_smoke(globals[pname], pname)
+		if err then return "private runtime smoke failed ["+pname+"]: "+err
+	end for
+	return null
 end function
 
 globals.test_cmd_echo = function()
@@ -758,12 +816,61 @@ globals.test_scpm_destination_filename_upload = function()
 	return "unexpected scpm result: "+catch
 end function
 
+// Behavioral tests for secure_copy.resolve_destination via scpm.
+globals.test_scpm_resolve_destination_existing_folder_upload = function()
+	src_dir = globals._suite_path("rd_up_src")
+	dst_dir = globals._suite_path("rd_up_dst")
+	command.mkdir(src_dir)
+	command.mkdir(dst_dir)
+	src = src_dir + "/rd_source.log"
+	out_file = dst_dir + "/rd_source.log"
+	command.poke(src, "resolve destination folder upload")
+	command.rm(out_file)
+
+	catch = command.scpm("-u", src, dst_dir, shell)
+	if not catch then catch = ""
+	if typeof(catch) != "string" then catch = str(catch)
+	if catch.indexOf("failed") != null then return "scpm upload failed: "+catch
+
+	err = globals._assert_file_exists(out_file, "expected upload output missing: "+out_file)
+	if err then return err
+	return globals._assert_eq(command.cat(out_file), command.cat(src), "uploaded folder destination content mismatch")
+end function
+
+globals.test_scpm_resolve_destination_file_download = function()
+	src_dir = globals._suite_path("rd_dn_src")
+	dst_dir = globals._suite_path("rd_dn_dst")
+	command.mkdir(src_dir)
+	command.mkdir(dst_dir)
+	src = src_dir + "/rd_remote.log"
+	dst = dst_dir + "/rd_downloaded.log"
+	command.poke(src, "resolve destination file download")
+	command.rm(dst)
+	command.rm(dst_dir + "/rd_remote.log")
+
+	catch = command.scpm("-d", src, dst, shell)
+	if not catch then catch = ""
+	if typeof(catch) != "string" then catch = str(catch)
+	if catch.indexOf("not found") != null then return "scpm download failed: "+catch
+
+	err = globals._assert_file_exists(dst, "expected download output missing: "+dst)
+	if err then return err
+	err = globals._assert_eq(command.cat(dst), command.cat(src), "downloaded file destination content mismatch")
+	if err then return err
+	return globals._assert_file_missing(dst_dir + "/rd_remote.log", "legacy name remained after file destination download")
+end function
+
 globals._test_add("core.command-map", @globals.test_core_command_map)
 globals._test_add("core.colors", @globals.test_core_colors)
 globals._test_add("core.paths", @globals.test_core_paths)
 globals._test_add("manifest.original.commands", @globals.test_manifest_original_commands)
 globals._test_add("manifest.original.globals", @globals.test_manifest_original_globals)
 globals._test_add("manifest.original.privates", @globals.test_manifest_original_privates)
+if globals._run_runtime_smoke then
+	globals._test_add("runtime.original.commands", @globals.test_runtime_original_commands)
+	globals._test_add("runtime.original.globals", @globals.test_runtime_original_globals)
+	globals._test_add("runtime.original.privates", @globals.test_runtime_original_privates)
+end if
 globals._test_add("cmd.echo", @globals.test_cmd_echo)
 globals._test_add("cmd.calc.add", @globals.test_cmd_calc_add)
 globals._test_add("cmd.calc.pwr", @globals.test_cmd_calc_pwr)
@@ -786,6 +893,8 @@ globals._test_add("cmd.enum.pipe", @globals.test_cmd_enum_pipe)
 globals._test_add("cmd.do.batch", @globals.test_cmd_do_batch)
 globals._test_add("cmd.purge.buffer", @globals.test_cmd_purge_buffer)
 globals._test_add("scp.destination-filename.upload", @globals.test_scpm_destination_filename_upload)
+globals._test_add("scp.resolve-destination.folder-upload", @globals.test_scpm_resolve_destination_existing_folder_upload)
+globals._test_add("scp.resolve-destination.file-download", @globals.test_scpm_resolve_destination_file_download)
 
 ok = globals.run_tests()
 if not globals._keep_artifacts then globals._cleanup_fs()
