@@ -9,7 +9,7 @@ Tests 5hell's functionalities, currently built against 4.3.9, might need updatin
 
 5hell_tests imports 5hell, so be sure to build 5hell, and then the tests, it'll import either from /root/src or from vscode. 
 
-##Credits:
+## Credits:
  Plu70: For making the awesome tool 5hell, and being a cool dude.
  Get your 5hell here:
  https://github.com/jhook777/5hell-for-Grey-Hack-the-Game
