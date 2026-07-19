@@ -16,3 +16,4 @@ Tests 5hell's functionalities, currently built against 4.3.9, might need updatin
 
  Add Marinette by not_s0phie to it aswell!:
  https://github.com/shippingfandom/Marinette
+ it has saved me so much time, and is just an awesome project!
